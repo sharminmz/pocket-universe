@@ -23,6 +23,7 @@ It needs a browser with WebGL2: any recent Chrome, Edge, Firefox or Safari. A la
 | --- | --- |
 | `W` `A` `S` `D` | Move |
 | Drag with the mouse (or one finger) | Look around |
+| On-screen stick and ▲ ▼ (phones and tablets) | Move, up / down |
 | `Space` / `C` | Up / down |
 | `Shift` | Fly faster |
 | `T` | Autopilot on / off (a guided tour of everything) |
