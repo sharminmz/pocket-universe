@@ -8,8 +8,8 @@ There are no images, no 3D models, no sound files and no libraries. Everything y
 
 ![Pocket Universe](docs/screenshots/earth.jpg)
 
-**▶ Live demo:** `https://YOUR-USERNAME.github.io/pocket-universe/`
-**▶ Video:** `YOUR-YOUTUBE-LINK`
+**▶ Live demo:** `https://sharminmz.github.io/pocket-universe/`
+**▶ Video:** `https://youtu.be/zu0ws2Lqkm0`
 
 ## Try it
 
