@@ -2,12 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Pocket Universe</title>
 <style>
   :root { --gold: #f1b866; --ink: #f4ead9; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: #020308; overflow: hidden; }
+  html, body { margin: 0; height: 100%; background: #020308; overflow: hidden; overscroll-behavior: none; touch-action: none;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  button { touch-action: manipulation; }
   body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--ink); }
   canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
   canvas.drag { cursor: grabbing; }
@@ -61,7 +63,12 @@
   #updown { right: calc(18px + env(safe-area-inset-right, 0px)); bottom: calc(78px + env(safe-area-inset-bottom, 0px)); }
   #updown button { display: block; width: 54px; height: 54px; margin-top: 10px; border-radius: 50%; font-size: 18px; color: var(--ink);
     background: rgba(8,10,20,.35); border: 1px solid rgba(244,234,217,.28); backdrop-filter: blur(4px); touch-action: none; }
-  #dest { max-height: 46vh; overflow-y: auto; }
+  #dest { max-height: 46vh; overflow-y: auto; touch-action: pan-y; }
+  #orb { position: fixed; top: calc(16px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); z-index: 4; display: none;
+    padding: 9px 20px; font-size: 14px; color: var(--gold); border-color: rgba(241,184,102,.7); }
+  #orb.show { display: block; }
+  #place { top: calc(62px + env(safe-area-inset-top, 0px)) !important; }
+  body.orbiting .hf, body:not(.orbiting) .ho { display: none; }
   body.touch #dest { inset-block-end: calc(214px + env(safe-area-inset-bottom, 0px)); }
   #hintT { display: none; font-size: 13px; opacity: .7; text-shadow: 0 1px 6px #000; width: 100%; text-align: center; }
   body.touch #hint { display: none; } body.touch #hintT { display: block; } body.touch #hud { justify-content: center; }
@@ -85,12 +92,10 @@
 
 <div id="hud">
   <div id="hint">
-    <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move ·
-    drag to look ·
-    <kbd>Space</kbd> / <kbd>C</kbd> up and down ·
-    <kbd>Shift</kbd> faster
+    <span class="hf"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · drag to look · <kbd>Space</kbd> / <kbd>C</kbd> up and down · <kbd>Shift</kbd> faster · <kbd>O</kbd> orbit a world</span>
+    <span class="ho">Drag to circle it · <kbd>W</kbd> / <kbd>S</kbd> or scroll: closer and away · <kbd>A</kbd> / <kbd>D</kbd> around · <kbd>O</kbd> fly free</span>
   </div>
-  <div id="hintT">Drag to look · use the stick to fly · ▲ ▼ up and down</div>
+  <div id="hintT"><span class="hf">Drag to look · use the stick to fly · ▲ ▼ up and down</span><span class="ho">Drag to circle it · stick up / down: closer and away · pinch to zoom</span></div>
   <div id="btns">
     <button class="hb" id="bDest">Destinations</button>
     <button class="hb on" id="bTour" title="T">Autopilot</button>
@@ -101,6 +106,7 @@
 </div>
 
 <div id="dest"></div>
+<button class="hb" id="orb" title="O">Orbit</button>
 <div id="stick" aria-label="Move"><div id="knob"></div></div>
 <div id="updown"><button id="bUp" aria-label="Up">▲</button><button id="bDown" aria-label="Down">▼</button></div>
 
@@ -214,11 +220,11 @@ void main(){
 
 // full-resolution composite: Milky Way glow, sun, planets and moons with procedural surfaces, rings, nebula on top
 const FS_COMP = HEAD + NOISE + RAY + `
-uniform sampler2D uNeb,uEarth; uniform float uTime,uPixA; uniform int uRing;
+uniform sampler2D uNeb,uEarth; uniform float uTime,uPixA; uniform int uRing,uOct;
 uniform vec4 uBT[NB]; uniform vec3 uBA[NB],uC1[NB],uC2[NB];
 in vec2 vUv; out vec4 o;
 float fbmL(vec3 p,float fp,int oct){float a=.5,s=0.,f=1.;
-  for(int i=0;i<oct;i++){float w=1.-smoothstep(.25,.7,f*fp);if(w<=0.)break;s+=a*w*noise(p*f+float(i)*7.3);f*=2.07;a*=.5;}
+  for(int i=0;i<oct;i++){if(i>=uOct)break;float w=1.-smoothstep(.25,.7,f*fp);if(w<=0.)break;s+=a*w*noise(p*f+float(i)*7.3);f*=2.07;a*=.5;}
   return s;}
 vec3 hash3(vec3 p){return vec3(hash(p),hash(p+13.7),hash(p+29.3));}
 float crat(vec3 p){vec3 g=floor(p),f=fract(p);vec3 r=hash3(g);
@@ -228,7 +234,7 @@ float crat(vec3 p){vec3 g=floor(p),f=fract(p);vec3 r=hash3(g);
   float bowl=d<1.?(d*d-1.)*.45:0.;float rim=exp(-(d-1.)*(d-1.)*14.)*.3;
   return (bowl+rim)*rad*3.;}
 float craters(vec3 p,float fp){float h=0.,f=2.5,a=1.;
-  for(int i=0;i<7;i++){float w=1.-smoothstep(.10,.28,f*fp);if(w<=0.)break;h+=a*w*crat(p*f+float(i)*3.1);f*=2.3;a*=.44;}
+  for(int i=0;i<7;i++){if(i>=uOct-4)break;float w=1.-smoothstep(.10,.28,f*fp);if(w<=0.)break;h+=a*w*crat(p*f+float(i)*3.1);f*=2.3;a*=.44;}
   return h;}
 float landV(vec3 p,float fp){
   vec2 uv=vec2(atan(p.z,p.x)*.15915494+.5,.5-asin(clamp(p.y,-1.,1.))*.31830989);
@@ -624,8 +630,9 @@ gl.bindTexture(gl.TEXTURE_2D, nebTex);
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 const SCALES = [.26, .36, .5]; let qi = 2, W = 0, H = 0, NW = 0, NH = 0, dpr = 1, resScale = 1;
+const COARSE = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches); let octMax = COARSE ? 8 : 11;
 function resize(force) {
-  dpr = Math.min(window.devicePixelRatio || 1, 1.5) * resScale;
+  dpr = Math.min(window.devicePixelRatio || 1, COARSE ? 1.25 : 1.5) * resScale;
   const w = Math.max(2, Math.round(canvas.clientWidth * dpr)), h = Math.max(2, Math.round(canvas.clientHeight * dpr));
   if (!force && w === W && h === H) return;
   W = w; H = h; canvas.width = W; canvas.height = H;
@@ -644,10 +651,10 @@ function viewOf(b, k) { // a sunlit vantage point near a body
   return [b.p[0] + o[0] * b.r * k, b.p[1] + o[1] * b.r * k, b.p[2] + o[2] * b.r * k];
 }
 const DEST = [
-  { name: 'Nebula', pos: [20, 5, 95], look: [0, 0, 0] },
-  { name: 'Spiral galaxy', pos: [-170, 70, -150], look: GAL },
+  { name: 'Nebula', pos: [20, 5, 95], look: [0, 0, 0], r: 0 },
+  { name: 'Spiral galaxy', pos: [-170, 70, -150], look: GAL, r: 0 },
   ...['sun', 'mercury', 'venus', 'earth', 'moon', 'mars', 'jupiter', 'io', 'europa', 'saturn', 'uranus', 'neptune', 'comet']
-    .map(id => { const b = body(id); return { name: b.name, pos: viewOf(b, id === 'sun' ? 2.6 : id === 'saturn' ? 3.6 : id === 'comet' ? 9 : 3), look: b.p }; }),
+    .map(id => { const b = body(id); return { name: b.name, pos: viewOf(b, id === 'sun' ? 2.6 : id === 'saturn' ? 3.6 : id === 'comet' ? 9 : 3), look: b.p, r: b.r }; }),
 ];
 const WP = [[0, 10, 150], [20, 5, 70], [10, -5, 15], [-25, 8, -30], [-70, 25, -90], [-170, 70, -150], [-60, 130, 60], [200, 110, 260],
   ...['neptune', 'uranus', 'saturn', 'jupiter', 'europa', 'mars', 'earth', 'moon', 'venus', 'mercury', 'sun', 'comet']
@@ -660,8 +667,9 @@ function path(u) {
   return o;
 }
 const cam = { pos: path(0), yaw: 0, pitch: 0, vel: [0, 0, 0], fwd: norm([20, -5, -80]) };
-let tour = true, tourU = 0, go = null, orbit = null, jx = 0, jy = 0;
-const keys = new Set(); let touches = 0;
+let tour = true, tourU = 0, go = null, orbit = null, jx = 0, jy = 0, idle = 9, orbZoom = 1; const orbDrag = [0, 0];
+const mkOrbit = (c, r) => ({ c, r, min: r ? r * .04 : 4, max: Math.max(r * 60, 400) });
+const keys = new Set();
 const FOV = 62 * Math.PI / 180;
 
 function basis() {
@@ -688,11 +696,11 @@ function aim(tgt, rate, dt) {
   cam.yaw = Math.atan2(cam.fwd[0], -cam.fwd[2]); cam.pitch = Math.asin(Math.max(-1, Math.min(1, cam.fwd[1])));
 }
 function update(dt) {
-  if (go) {
-    go.t += dt; const k = Math.min(1, go.t / go.T), e = k * k * k * (k * (k * 6 - 15) + 10);
-    cam.pos = go.from.map((v, i) => v + (go.to[i] - v) * e); cam.vel = [0, 0, 0];
-    collide(1.3); aim(norm(sub(go.look, cam.pos)), 2.5, dt);
-    if (k >= 1) { orbit = go.look; go = null; }
+  if (go) { // fly to a destination along an arc that rises over the plane of the planets
+    go.t += dt; const k = Math.min(1, go.t / go.T), e = k * k * k * (k * (k * 6 - 15) + 10), q = 1 - e;
+    cam.pos = go.from.map((v, i) => q * q * v + 2 * q * e * go.mid[i] + e * e * go.to[i]); cam.vel = [0, 0, 0];
+    collide(1.05); aim(norm(sub(go.look, cam.pos)), 2.5, dt);
+    if (k >= 1) { orbit = mkOrbit(go.look, go.r); idle = 9; go = null; }
   } else if (tour) {
     const { nb, ds } = nearest(cam.pos);
     const dN = Math.max(len(cam.pos) - 66, 0) + 22, dG = len(sub(cam.pos, WP[5])) + 25;
@@ -707,35 +715,42 @@ function update(dt) {
     aim(tgt, .8, dt); cam.vel = cam.fwd.map(v => v * speed);
   } else {
     const { F, R } = basis(); let f = -jy, r = jx, u = 0;
-    if (keys.has('KeyW') || keys.has('ArrowUp') || touches > 1) f += 1;
+    if (keys.has('KeyW') || keys.has('ArrowUp')) f += 1;
     if (keys.has('KeyS') || keys.has('ArrowDown')) f -= 1;
     if (keys.has('KeyD') || keys.has('ArrowRight')) r += 1;
     if (keys.has('KeyA') || keys.has('ArrowLeft')) r -= 1;
     if (keys.has('Space') || keys.has('KeyE')) u += 1;
     if (keys.has('KeyC') || keys.has('KeyQ')) u -= 1;
-    if (orbit) { // after arriving somewhere, circle it slowly until the viewer takes over
-      if (f || r || u) orbit = null;
-      else {
-        const a = dt * .05, c = Math.cos(a), sn = Math.sin(a), x = cam.pos[0] - orbit[0], z = cam.pos[2] - orbit[2];
-        cam.pos[0] = orbit[0] + x * c - z * sn; cam.pos[2] = orbit[2] + x * sn + z * c; cam.vel = [0, 0, 0];
-        collide(1.012); aim(norm(sub(orbit, cam.pos)), 3, dt); return;
-      }
+    const boost = (keys.has('ShiftLeft') || keys.has('ShiftRight')) ? 3.5 : 1;
+    if (orbit) { // circle a world: drag or A/D go around it, forward/back move closer or away, the camera always faces it
+      const o = orbit, v = sub(cam.pos, o.c); let dist = Math.max(len(v), 1e-3);
+      let az = Math.atan2(v[2], v[0]), el = Math.asin(Math.max(-1, Math.min(1, v[1] / dist)));
+      if (f || r || u || orbDrag[0] || orbDrag[1] || orbZoom !== 1) idle = 0; else idle += dt;
+      az += -r * dt * .9 * boost - orbDrag[0] * .006 + (idle > 2.5 ? dt * .05 : 0);
+      el = Math.max(-1.35, Math.min(1.35, el + u * dt * .7 + orbDrag[1] * .006));
+      let h = Math.max(dist - o.r, o.min) * Math.exp(-f * dt * 1.1 * boost) * orbZoom;   // height above the surface
+      h = Math.max(o.min, Math.min(o.max, h)); dist = o.r + h;
+      orbDrag[0] = orbDrag[1] = 0; orbZoom = 1;
+      const ce = Math.cos(el);
+      cam.pos = [o.c[0] + dist * ce * Math.cos(az), o.c[1] + dist * Math.sin(el), o.c[2] + dist * ce * Math.sin(az)];
+      collide(1.012); cam.vel = [0, 0, 0];
+      aim(norm(sub(o.c, cam.pos)), 10, dt); return;
     }
-    // slow down near a surface so textures can be explored up close
-    const slow = Math.max(.012, Math.min(1, nearest(cam.pos).ds / 30));
-    const acc = ((keys.has('ShiftLeft') || keys.has('ShiftRight')) ? 560 : 90) * slow, damp = Math.exp(-dt * 1.6);
+    // free flight: top speed grows with the distance to the nearest surface, so close passes are gentle and it is always easy to pull away
+    const { nb, ds } = nearest(cam.pos), d0 = Math.max(ds, 0);
+    const vmax = Math.min(70 + d0 * .25, d0 * 1.4 + nb.r * .45) * boost, acc = vmax * 2.2, damp = Math.exp(-dt * 2.2);
     for (let i = 0; i < 3; i++) {
       cam.vel[i] = cam.vel[i] * damp + (F[i] * f + R[i] * r + (i === 1 ? u : 0)) * acc * dt;
       cam.pos[i] += cam.vel[i] * dt;
     }
-    const vmax = 400 * slow, v = len(cam.vel); if (v > vmax) cam.vel = cam.vel.map(c => c * vmax / v);
+    const v = len(cam.vel); if (v > vmax) cam.vel = cam.vel.map(c => c * vmax / v);
     collide(1.012);
     const far = len(cam.pos); if (far > 2600) for (let i = 0; i < 3; i++) cam.pos[i] *= 2600 / far;
     cam.fwd = F;
   }
 }
 function setTour(on) {
-  go = null; orbit = null;
+  go = null; if (on) orbit = null;
   if (on === tour) return;
   if (on) { // resume from the nearest point on the path
     let best = 0, bd = 1e9;
@@ -745,9 +760,20 @@ function setTour(on) {
   tour = on; $('bTour').classList.toggle('on', on);
 }
 function goTo(d) {
-  setTour(false);
-  const dist = len(sub(d.pos, cam.pos));
-  go = { t: 0, T: Math.max(3, Math.min(9, dist / 120)), from: cam.pos.slice(), to: d.pos, look: d.look };
+  setTour(false); orbit = null;
+  const dist = len(sub(d.pos, cam.pos)), lift = Math.min(dist * .28, 260);
+  const mid = cam.pos.map((v, i) => (v + d.pos[i]) / 2 + (i === 1 ? lift : 0));
+  go = { t: 0, T: Math.max(3, Math.min(9, dist / 120)), from: cam.pos.slice(), mid, to: d.pos, look: d.look, r: d.r };
+}
+function toggleOrbit() {
+  if (tour || go) setTour(false);
+  if (orbit) orbit = null; else { const { nb } = nearest(cam.pos); orbit = mkOrbit(nb.p, nb.r); idle = 0; }
+}
+let orbState = '';
+function orbUi() { // the Orbit / Fly free button appears near a world
+  const near = !orbit && started && !tour && !go && (() => { const { nb, ds } = nearest(cam.pos); return ds < nb.r * 8; })();
+  const st = !started || tour || go ? '' : orbit ? 'Fly free' : near ? 'Orbit' : '';
+  if (st !== orbState) { orbState = st; const b = $('orb'); b.textContent = st || 'Orbit'; b.classList.toggle('show', !!st); document.body.classList.toggle('orbiting', st === 'Fly free'); }
 }
 
 // matrices (column-major)
@@ -792,7 +818,10 @@ function frame(now) {
   const dt = Math.min(.05, (now - last) / 1000 || .016); const raw = now - last; last = now;
   // adapt nebula resolution to the machine
   if (raw < 500) { acc += raw; frames++; }
-  if (frames >= 80) { if (acc / frames > 26) { if (qi > 0) qi--; else if (resScale > .45) resScale *= .8; resize(true); } acc = 0; frames = 0; }
+  if (frames >= 45) { // step quality down until the scene runs smoothly: nebula first, then surface detail, then resolution
+    const ms = acc / frames;
+    if (ms > 28 && qi > 0) { qi--; resize(true); } else if (ms > 34 && octMax > 6) octMax--; else if (ms > 34 && resScale > .45) { resScale *= .82; resize(true); }
+    acc = 0; frames = 0; }
   render(dt);
 }
 function render(dt) {
@@ -809,7 +838,7 @@ function render(dt) {
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, nebTex);
   gl.useProgram(pComp.p); setCommon(pComp, B, aspect);
   const cu = pComp.u;
-  gl.uniform1i(cu.uEarth, 1); gl.uniform1i(cu.uRing, RING); gl.uniform1f(cu.uPixA, 2 * Math.tan(FOV / 2) / H);
+  gl.uniform1i(cu.uEarth, 1); gl.uniform1i(cu.uRing, RING); gl.uniform1i(cu.uOct, octMax); gl.uniform1f(cu.uPixA, 2 * Math.tan(FOV / 2) / H);
   gl.uniform4fv(cu['uBT[0]'], uBT); gl.uniform3fv(cu['uBA[0]'], uBA); gl.uniform3fv(cu['uC1[0]'], uC1); gl.uniform3fv(cu['uC2[0]'], uC2);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 
@@ -825,7 +854,7 @@ function render(dt) {
   gl.uniformMatrix4fv(pSpr.u.uVP, false, VP); gl.uniform1f(pSpr.u.uAspect, aspect); gl.uniform1f(pSpr.u.uH, H);
   [[farSprites, 1], [nearSprites, 0]].forEach(([g, inf]) => { gl.uniform1i(pSpr.u.uInf, inf); gl.bindVertexArray(g.vao); gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, g.n); });
 
-  place();
+  place(); orbUi();
 }
 
 // ---------------------------------------------------------------- place caption
@@ -886,48 +915,59 @@ function setMute(m) {
 }
 
 // ---------------------------------------------------------------- input
-let drag = null;
+const ptrs = new Map(); let pinch = 0;
 canvas.addEventListener('pointerdown', e => {
   if (e.pointerType === 'touch') document.body.classList.add('touch');
-  touches++; drag = { x: e.clientX, y: e.clientY, id: e.pointerId }; canvas.classList.add('drag');
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); pinch = 0; canvas.classList.add('drag');
   try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
 });
 canvas.addEventListener('pointermove', e => {
-  if (!drag || drag.id !== e.pointerId) return;
-  const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
-  if (Math.abs(dx) + Math.abs(dy) > 0) { if (tour || go) setTour(false); orbit = null; }
-  cam.yaw += dx * .0032; cam.pitch = Math.max(-1.45, Math.min(1.45, cam.pitch - dy * .0032));
+  const p = ptrs.get(e.pointerId); if (!p) return;
+  const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
+  if (ptrs.size >= 2) { // two fingers: pinch to move closer or away while orbiting
+    const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+    if (pinch && orbit) orbZoom *= pinch / Math.max(d, 1);
+    pinch = d; return;
+  }
+  if (!dx && !dy) return;
+  if (tour || go) setTour(false);
+  if (orbit) { orbDrag[0] += dx; orbDrag[1] += dy; }
+  else { cam.yaw += dx * .0032; cam.pitch = Math.max(-1.45, Math.min(1.45, cam.pitch - dy * .0032)); }
 });
-const up = e => { touches = Math.max(0, touches - 1); if (drag && drag.id === e.pointerId) { drag = null; canvas.classList.remove('drag'); } };
-canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
-if (window.matchMedia && matchMedia('(pointer: coarse)').matches) document.body.classList.add('touch');
+const up = e => { ptrs.delete(e.pointerId); pinch = 0; if (!ptrs.size) canvas.classList.remove('drag'); };
+canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up); canvas.addEventListener('lostpointercapture', up);
+canvas.addEventListener('wheel', e => { if (orbit) { orbZoom *= Math.exp(Math.max(-60, Math.min(60, e.deltaY)) * .004); e.preventDefault(); } }, { passive: false });
+if (COARSE) document.body.classList.add('touch');
 const stick = $('stick'), knob = $('knob'); let stickId = null;
 function stickMove(e) {
   const b = stick.getBoundingClientRect(), R = b.width / 2;
   let x = (e.clientX - b.left - R) / R, y = (e.clientY - b.top - R) / R; const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; }
+  if (Math.hypot(x, y) < .12) x = y = 0;   // small dead zone so a resting thumb does not drift
   jx = x; jy = y; knob.style.transform = `translate(${x * R * .6}px,${y * R * .6}px)`;
 }
-stick.addEventListener('pointerdown', e => { stickId = e.pointerId; try { stick.setPointerCapture(e.pointerId); } catch (_) {} setTour(false); stickMove(e); e.preventDefault(); });
+stick.addEventListener('pointerdown', e => { stickId = e.pointerId; try { stick.setPointerCapture(e.pointerId); } catch (_) {} if (tour || go) setTour(false); stickMove(e); e.preventDefault(); });
 stick.addEventListener('pointermove', e => { if (e.pointerId === stickId) stickMove(e); });
 const stickEnd = e => { if (e.pointerId === stickId) { stickId = null; jx = jy = 0; knob.style.transform = ''; } };
-stick.addEventListener('pointerup', stickEnd); stick.addEventListener('pointercancel', stickEnd);
+stick.addEventListener('pointerup', stickEnd); stick.addEventListener('pointercancel', stickEnd); stick.addEventListener('lostpointercapture', stickEnd);
 [['bUp', 'Space'], ['bDown', 'KeyC']].forEach(([id, code]) => {
   const b = $(id), off = () => keys.delete(code);
-  b.addEventListener('pointerdown', e => { keys.add(code); setTour(false); e.preventDefault(); });
+  b.addEventListener('pointerdown', e => { keys.add(code); if (tour || go) setTour(false); e.preventDefault(); });
   b.addEventListener('pointerup', off); b.addEventListener('pointercancel', off); b.addEventListener('pointerleave', off);
 });
+$('orb').onclick = e => { toggleOrbit(); e.currentTarget.blur(); };
 const MOVE = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyC', 'KeyQ', 'KeyE'];
 window.addEventListener('keydown', e => {
   if (!started || e.target.tagName === 'BUTTON' && (e.code === 'Space' || e.code === 'Enter')) return;
-  if (MOVE.includes(e.code)) { keys.add(e.code); setTour(false); e.preventDefault(); }
+  if (MOVE.includes(e.code)) { keys.add(e.code); if (tour || go) setTour(false); e.preventDefault(); }
   else if (e.code.startsWith('Shift')) keys.add(e.code);
   else if (e.code === 'KeyT') setTour(!tour);
   else if (e.code === 'KeyM') setMute(!muted);
   else if (e.code === 'KeyF') fullscreen();
   else if (e.code === 'KeyL') setLabels(!labels);
+  else if (e.code === 'KeyO') toggleOrbit();
 });
 window.addEventListener('keyup', e => keys.delete(e.code));
-window.addEventListener('blur', () => keys.clear());
+window.addEventListener('blur', () => { keys.clear(); ptrs.clear(); jx = jy = 0; });
 function setLabels(on) { labels = on; $('bNames').classList.toggle('on', on); if (!on) { placeName = ''; clearTimeout(placeT); $('place').classList.remove('on'); } }
 function fullscreen() {
   try { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); } catch (_) {}
@@ -945,14 +985,14 @@ $('begin').onclick = e => {
 const destEl = $('dest');
 DEST.forEach(d => { const b = document.createElement('button'); b.className = 'hb'; b.textContent = d.name; b.onclick = () => { goTo(d); destEl.classList.remove('on'); $('bDest').classList.remove('on'); b.blur(); }; destEl.appendChild(b); });
 $('bDest').onclick = e => { const on = destEl.classList.toggle('on'); e.currentTarget.classList.toggle('on', on); e.currentTarget.blur(); };
-window.__dbg = { cam, setTour, BODIES, viewOf, GAL, S,
-  manual() { manual = true; }, step(dt) { render(dt); }, setTime(t) { time = t; },
+window.__dbg = { cam, setTour, state: () => ({ tour, go: !!go, orbit: !!orbit, octMax, resScale, qi }), stick(x, y) { jx = x; jy = y; }, BODIES, viewOf, GAL, S,
+  manual() { manual = true; }, step(dt) { render(dt); }, setTime(t) { time = t; }, sim(n, dt) { for (let i = 0; i < n; i++) { time += dt; update(dt); } orbUi(); },
   async audio(dur) { // offline render of the soundtrack, as base64 16-bit PCM
     const ctx = new OfflineAudioContext(1, Math.ceil(dur * 44100), 44100); buildAudio(ctx, dur);
     const d = (await ctx.startRendering()).getChannelData(0), o = new Int16Array(d.length);
     for (let i = 0; i < d.length; i++) o[i] = Math.max(-1, Math.min(1, d[i])) * 32767;
     const u = new Uint8Array(o.buffer); let s = ''; for (let i = 0; i < u.length; i += 32768) s += String.fromCharCode.apply(null, u.subarray(i, i + 32768)); return btoa(s);
-  }, set(p, look, up) { setTour(false); cam.up = up || null; cam.pos = p.slice(); const f = norm(sub(look, p)); cam.fwd = f; cam.yaw = Math.atan2(f[0], -f[2]); cam.pitch = Math.asin(f[1]); cam.vel = [0, 0, 0]; } };
+  }, set(p, look, up) { setTour(false); orbit = null; cam.up = up || null; cam.pos = p.slice(); const f = norm(sub(look, p)); cam.fwd = f; cam.yaw = Math.atan2(f[0], -f[2]); cam.pitch = Math.asin(f[1]); cam.vel = [0, 0, 0]; } };
 
 resize(true);
 requestAnimationFrame(frame);

@@ -8,8 +8,8 @@ There are no images, no 3D models, no sound files and no libraries. Everything y
 
 ![Pocket Universe](docs/screenshots/earth.jpg)
 
-**▶ Live demo:** `https://sharminmz.github.io/pocket-universe/`
-**▶ Video:** `https://youtu.be/zu0ws2Lqkm0`
+**▶ Live demo:** `https://YOUR-USERNAME.github.io/pocket-universe/`
+**▶ Video:** `YOUR-YOUTUBE-LINK`
 
 ## Try it
 
@@ -23,15 +23,19 @@ It needs a browser with WebGL2: any recent Chrome, Edge, Firefox or Safari. A la
 | --- | --- |
 | `W` `A` `S` `D` | Move |
 | Drag with the mouse (or one finger) | Look around |
-| On-screen stick and ▲ ▼ (phones and tablets) | Move, up / down |
 | `Space` / `C` | Up / down |
 | `Shift` | Fly faster |
+| `O` or the **Orbit** button | Circle the nearest world; again to fly free |
 | `T` | Autopilot on / off (a guided tour of everything) |
 | `L` | Show / hide the names of places |
 | `M` | Sound on / off |
 | `F` | Fullscreen |
 
-The **Destinations** button flies you straight to any object. Movement slows down automatically as you get close to a surface, so you can explore it up close.
+On a phone or tablet, an on-screen stick moves you and ▲ ▼ go up and down.
+
+**Orbit mode.** Near a planet or moon an **Orbit** button appears. While orbiting, drag to circle the world, and push forward or back (stick, `W` / `S`, scroll or pinch) to move closer or away. The camera always faces it. Press **Fly free** to leave.
+
+The **Destinations** button flies you straight to any object and puts you in orbit around it. In free flight, your top speed shrinks as you approach a surface, so close passes are gentle and pulling away is always easy.
 
 ## What's out there
 
